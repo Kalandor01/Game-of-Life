@@ -4,16 +4,17 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingWorker;
 import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
@@ -25,11 +26,10 @@ public class CellAutomata extends JFrame {
     private final JButton randomPopulationbutton = new JButton("Increase population");
     private final JButton stepButton = new JButton("Step");
     private final JButton startStopButton = new JButton("Start/Stop");
-    private final JLabel sizeLabel = new JLabel("Size: ");
-    private final JComboBox sizeComboBox = new JComboBox(new String[]{"10*10", "20*20", "30*30", "40*40", "50*50", "100*100"});
-    private final JLabel delayLabel = new JLabel("Delay: ");
-    private final JComboBox delayComboBox = new JComboBox(new String[]{"0ms!!!", "50ms", "100ms", "500ms", "1000ms"});
-    private final JCheckBox extraColorsCheckBox = new JCheckBox("Show extra colors", true);
+    private final JComboBox sizeComboBox = new JComboBox(new String[]{"--Size--", "10*10", "20*20", "30*30", "40*40", "50*50", "100*100"});
+    private final JComboBox delayComboBox = new JComboBox(new String[]{"--Delay--", "0ms!!!", "50ms", "100ms", "500ms", "1000ms"});
+    private final JCheckBox extraColorsCheckBox = new JCheckBox("Extra states", true);
+    private final JComboBox statesComboBox = new JComboBox();
     private final JPanel gameSpacePanel = new JPanel(new GridLayout(size, size));
     private final Color COLOR_LIVING = Color.ORANGE;
     private final Color COLOR_DYING = Color.LIGHT_GRAY;
@@ -40,9 +40,12 @@ public class CellAutomata extends JFrame {
     private boolean showExtraColors = true;
     private boolean isPlaying = false;
     private int delay = 50;
+    private int currentStateIndex = 0;
+    
+    private HashMap<String, ArrayList<ArrayList<Boolean>>> savedStates = new HashMap<>();
 
     public CellAutomata() {
-        inicialise(size);
+        inicialise(size, size);
     }
     
     private void playLoop()
@@ -61,40 +64,41 @@ public class CellAutomata extends JFrame {
         }
     }
 
-    private void meretetAllit(int size) {
+    private void resizeBoard(int width, int height) {
         gameSpacePanel.removeAll();
         repaint();
-        gameSpacePanel.setLayout(new GridLayout(size, size));
-        cells = new JButton[size][size];
+        gameSpacePanel.setLayout(new GridLayout(width, height));
+        cells = new JButton[width][height];
         createCells();
         revalidate();
         restart();
     }
 
-    private void inicialise(int size) {
+    private void inicialise(int width, int height)
+    {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setTitle("Cell automata");
-        setSize(670, 700);
+        setTitle("Game of Life");
+        setSize(810, 860);
         setLocationRelativeTo(this);
         JPanel basePanel = new JPanel();
         basePanel.add(restartButton);
         basePanel.add(randomPopulationbutton);
         basePanel.add(stepButton);
         basePanel.add(startStopButton);
-        basePanel.add(sizeLabel);
         basePanel.add(sizeComboBox);
-        basePanel.add(delayLabel);
         basePanel.add(delayComboBox);
         basePanel.add(extraColorsCheckBox);
+        basePanel.add(statesComboBox);
         restartButton.addActionListener(e -> pressRestartButton());
         stepButton.addActionListener(e -> pressStepButton());
         randomPopulationbutton.addActionListener(e -> pressRandomPopulationButton());
         startStopButton.addActionListener(e -> pressStartStopButton());
         sizeComboBox.addItemListener(e -> selectSize(e));
-        delayComboBox.setSelectedIndex(1);
         delayComboBox.addItemListener(e -> selectDelay(e));
         extraColorsCheckBox.addActionListener(e -> toggleExtraColors(e));
+        statesComboBox.addItemListener(e -> selectState(e));
         add(basePanel, BorderLayout.NORTH);
+        updateStatesComboBox();
         createCells();
         add(gameSpacePanel);
         setVisible(true);
@@ -105,16 +109,24 @@ public class CellAutomata extends JFrame {
     {
         size = getSize(sizeComboBox);
         delay = getDelay(delayComboBox);
-        meretetAllit(size);
+        resizeBoard(size, size);
     }
     
-    private static int getSize(JComboBox comboBox)
+    private int getSize(JComboBox comboBox)
     {
+        if (comboBox.getSelectedIndex() == 0)
+        {
+            return size;
+        }
         return Integer.parseInt(comboBox.getSelectedItem().toString().split("\\*")[0]);
     }
     
-    private static int getDelay(JComboBox comboBox)
+    private int getDelay(JComboBox comboBox)
     {
+        if (comboBox.getSelectedIndex() == 0)
+        {
+            return delay;
+        }
         return Integer.parseInt(comboBox.getSelectedItem().toString().split("ms")[0]);
     }
     
@@ -182,7 +194,7 @@ public class CellAutomata extends JFrame {
         if (size != newSize)
         {
             size = newSize;
-            meretetAllit(size);
+            resizeBoard(size, size);
         }
     }
     
@@ -193,6 +205,79 @@ public class CellAutomata extends JFrame {
         if (delay != newdelay)
         {
             delay = newdelay;
+        }
+    }
+    
+    private void selectState(ItemEvent e)
+    {
+        var stateBox = (JComboBox) e.getSource();
+        var newStateIndex = stateBox.getSelectedIndex();
+        // new item
+        if (currentStateIndex != newStateIndex)
+        {
+            if (newStateIndex == stateBox.getItemCount() - 1)
+            {
+                var name = JOptionPane.showInputDialog(this, "Please name this state", "New state name", JOptionPane.QUESTION_MESSAGE);
+                if (name != null && !name.equals(""))
+                {
+                    saveNewState(name);
+                }
+            }
+            // load item
+            else if (newStateIndex != 0)
+            {
+                var stateName = stateBox.getSelectedItem();
+                var state = savedStates.get(stateName);
+                loadState(state);
+            }
+            currentStateIndex = newStateIndex;
+        }
+    }
+    
+    private void saveNewState(String name)
+    {
+        var currentState = new ArrayList<ArrayList<Boolean>>();
+        for (int x = 0; x < cells.length; x++)
+        {
+            var currentRow = new ArrayList<Boolean>();
+            for (int y = 0; y < cells[x].length; y++)
+            {
+                currentRow.add(isLiving(x, y) == 1);
+            }
+            currentState.add(currentRow);
+        }
+        savedStates.put(name, currentState);
+        updateStatesComboBox();
+    }
+    
+    private void updateStatesComboBox()
+    {
+        var statesComboBoxList = new ArrayList<String>();
+        statesComboBoxList.add("--Saved states--");
+        var stateNames = savedStates.keySet();
+        for (String stateName : stateNames)
+        {
+            statesComboBoxList.add(stateName);
+        }
+        statesComboBoxList.add("New state");
+        var model = new DefaultComboBoxModel(statesComboBoxList.toArray());
+        statesComboBox.setModel(model);
+    }
+    
+    private void loadState(ArrayList<ArrayList<Boolean>> state)
+    {
+        size = state.size();
+        resizeBoard(state.size(), state.get(0).size());
+        for (int x = 0; x < state.size(); x++)
+        {
+            for (int y = 0; y < state.get(x).size(); y++)
+            {
+                cells[x][y].setBackground(state.get(x).get(y) ? COLOR_LIVING : COLOR_DEAD);
+            }
+        }
+        if (showExtraColors)
+        {
+            overlayExtraColors();
         }
     }
 
