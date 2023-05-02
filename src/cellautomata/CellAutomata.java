@@ -73,7 +73,7 @@ public class CellAutomata extends JFrame {
 
     private void inicialise(int size) {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setTitle("Sejtautomaták");
+        setTitle("Cell automata");
         setSize(670, 700);
         setLocationRelativeTo(this);
         JPanel basePanel = new JPanel();
